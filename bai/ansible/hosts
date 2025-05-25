@@ -1,0 +1,10 @@
+[managed_hosts]
+192.168.20.11 ansible_user=root ansible_ssh_pass=root
+192.168.20.10 ansible_user=root ansible_ssh_pass=root
+
+[all:vars]
+ansible_ssh_common_args="-o StrictHostKeyChecking=no"
+
+[webservers]
+
+[databases]

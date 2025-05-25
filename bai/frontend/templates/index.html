@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ansible 数据大屏</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- 登录模态框 -->
+    <div id="loginModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2><i class="fas fa-lock"></i> 管理员登录</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">用户名:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit">登录</button>
+            </form>
+            <div id="loginError" class="error-message"></div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainContent" style="display: none;">
+        <!-- 顶部导航 -->
+        <header class="header">
+            <div class="header-left">
+                <h1><i class="fas fa-server"></i> Ansible 运维监控大屏</h1>
+            </div>
+            <div class="header-right">
+                <span id="currentTime"></span>
+                <button id="logoutBtn" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> 登出
+                </button>
+            </div>
+        </header>
+
+        <!-- 主要内容区域 -->
+        <main class="main-content">
+            <!-- 控制面板 -->
+            <section class="control-panel">
+                <div class="control-buttons">
+                    <button id="pingBtn" class="control-btn">
+                        <i class="fas fa-wifi"></i> 连通性检测
+                    </button>
+                    <button id="resourceBtn" class="control-btn">
+                        <i class="fas fa-chart-line"></i> 资源监控
+                    </button>
+                    <button id="networkBtn" class="control-btn">
+                        <i class="fas fa-network-wired"></i> 网络信息
+                    </button>
+                    <button id="uploadBtn" class="control-btn upload-btn">
+                        <i class="fas fa-cloud-upload-alt"></i> 文件上传
+                    </button>
+                    <button id="shutdownBtn" class="control-btn shutdown-btn">
+                        <i class="fas fa-power-off"></i> 远程关机
+                    </button>
+                    <button id="addHostBtn" class="control-btn add-btn">
+                        <i class="fas fa-plus"></i> 添加主机
+                    </button>
+                </div>
+            </section>
+
+            <!-- 统计卡片 -->
+            <section class="stats-cards">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-server"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalHosts">0</h3>
+                        <p>总主机数</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon online">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="onlineHosts">0</h3>
+                        <p>在线主机</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon offline">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="offlineHosts">0</h3>
+                        <p>离线主机</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="warningHosts">0</h3>
+                        <p>告警主机</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 主机状态表格 -->
+            <section class="hosts-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-list"></i> 主机状态</h2>
+                    <div class="section-actions">
+                        <button id="refreshBtn" class="refresh-btn">
+                            <i class="fas fa-sync-alt"></i> 刷新
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="hostsTable" class="hosts-table">
+                        <thead>
+                            <tr>
+                                <th>主机IP</th>
+                                <th>状态</th>
+                                <th>CPU使用率</th>
+                                <th>内存使用率</th>
+                                <th>磁盘使用率</th>
+                                <th>系统负载</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hostsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 资源监控图表 -->
+            <section class="charts-section">
+                <div class="chart-container">
+                    <div class="chart-card">
+                        <h3>CPU使用率分布</h3>
+                        <canvas id="cpuChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>内存使用率分布</h3>
+                        <canvas id="memoryChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 添加主机模态框 -->
+    <div id="addHostModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-plus"></i> 添加新主机</h2>
+            <form id="addHostForm">
+                <div class="form-group">
+                    <label for="hostIp">主机IP:</label>
+                    <input type="text" id="hostIp" name="hostIp" required>
+                </div>
+                <div class="form-group">
+                    <label for="hostUsername">用户名:</label>
+                    <input type="text" id="hostUsername" name="hostUsername" value="root">
+                </div>
+                <div class="form-group">
+                    <label for="hostPassword">密码:</label>
+                    <input type="password" id="hostPassword" name="hostPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="hostGroup">主机组:</label>
+                    <select id="hostGroup" name="hostGroup">
+                        <option value="managed_hosts">managed_hosts</option>
+                        <option value="webservers">webservers</option>
+                        <option value="databases">databases</option>
+                        <option value="other">other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="hostDescription">描述:</label>
+                    <input type="text" id="hostDescription" name="hostDescription" placeholder="主机描述(可选)">
+                </div>
+                <button type="submit">添加主机</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 编辑主机模态框 -->
+    <div id="editHostModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-edit"></i> 编辑主机</h2>
+            <form id="editHostForm">
+                <input type="hidden" id="editHostIp" name="editHostIp">
+                <div class="form-group">
+                    <label for="editHostIpDisplay">主机IP:</label>
+                    <input type="text" id="editHostIpDisplay" name="editHostIpDisplay" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="editHostUsername">用户名:</label>
+                    <input type="text" id="editHostUsername" name="editHostUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="editHostPassword">密码:</label>
+                    <input type="password" id="editHostPassword" name="editHostPassword" placeholder="留空表示不修改密码">
+                </div>
+                <div class="form-group">
+                    <label for="editHostGroup">主机组:</label>
+                    <select id="editHostGroup" name="editHostGroup">
+                        <option value="managed_hosts">managed_hosts</option>
+                        <option value="webservers">webservers</option>
+                        <option value="databases">databases</option>
+                        <option value="other">other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editHostDescription">描述:</label>
+                    <input type="text" id="editHostDescription" name="editHostDescription">
+                </div>
+                <button type="submit">更新主机</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 主机详情模态框 -->
+    <div id="hostDetailModal" class="modal" style="display: none;">
+        <div class="modal-content host-detail-modal">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-info-circle"></i> 主机详情</h2>
+            
+            <!-- 基本信息网格布局 -->
+            <div class="host-info-grid">
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-server"></i>
+                    </div>
+                    <div class="info-content">
+                        <label>主机IP</label>
+                        <span id="detailHostIp"></span>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="info-content">
+                        <label>用户名</label>
+                        <span id="detailHostUsername"></span>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <div class="info-content">
+                        <label>主机组</label>
+                        <span id="detailHostGroup"></span>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-tag"></i>
+                    </div>
+                    <div class="info-content">
+                        <label>描述</label>
+                        <span id="detailHostDescription"></span>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-wifi"></i>
+                    </div>
+                    <div class="info-content">
+                        <label>连接状态</label>
+                        <span id="detailHostStatus"></span>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <div class="info-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <div class="info-content">
+                        <label>密码配置</label>
+                        <span id="detailHostPassword"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 分行操作按钮 -->
+            <div class="modal-actions-grid">
+                <div class="action-row primary-actions">
+                    <button id="editFromDetailBtn" class="action-btn-grid edit-btn">
+                        <i class="fas fa-edit"></i>
+                        <span>编辑主机</span>
+                    </button>
+                    <button id="uploadToHostBtn" class="action-btn-grid upload-btn">
+                        <i class="fas fa-upload"></i>
+                        <span>上传文件</span>
+                    </button>
+                </div>
+                <div class="action-row danger-actions">
+                    <button id="shutdownHostBtn" class="action-btn-grid shutdown-btn">
+                        <i class="fas fa-power-off"></i>
+                        <span>远程关机</span>
+                    </button>
+                    <button id="deleteFromDetailBtn" class="action-btn-grid delete-btn">
+                        <i class="fas fa-trash"></i>
+                        <span>删除主机</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载指示器 -->
+    <div id="loadingIndicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <p>正在执行操作...</p>
+    </div>
+
+    <!-- 文件上传模态框 -->
+    <div id="uploadModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-cloud-upload-alt"></i> 文件上传</h2>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="uploadFile">选择文件:</label>
+                    <div class="file-upload-container">
+                        <input type="file" id="uploadFile" name="file" required>
+                        <label for="uploadFile" class="file-upload-label">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span>点击选择文件或拖拽到此处</span>
+                        </label>
+                    </div>
+                    <small class="file-info">支持格式：txt, pdf, png, jpg, gif, zip, tar, gz, sh, py, conf, log (最大100MB)</small>
+                </div>
+                <div class="form-group">
+                    <label for="uploadHosts">目标主机:</label>
+                    <select id="uploadHosts" name="hosts" multiple>
+                        <option value="all">所有主机</option>
+                    </select>
+                    <small>按住Ctrl键可选择多个主机</small>
+                </div>
+                <div class="form-group">
+                    <label for="remotePath">远程路径:</label>
+                    <input type="text" id="remotePath" name="remote_path" value="/tmp/" required>
+                    <small>文件将上传到目标主机的此路径</small>
+                </div>
+                <div class="upload-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <span class="progress-text">0%</span>
+                </div>
+                <button type="submit" class="upload-submit-btn">
+                    <i class="fas fa-upload"></i> 开始上传
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 远程关机模态框 -->
+    <div id="shutdownModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-power-off"></i> 远程关机</h2>
+            <div class="warning-message">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>注意：此操作将关闭目标主机，请谨慎操作！</p>
+            </div>
+            <form id="shutdownForm">
+                <div class="form-group">
+                    <label for="shutdownHosts">目标主机:</label>
+                    <select id="shutdownHosts" name="hosts" multiple required>
+                        <option value="all">所有主机</option>
+                    </select>
+                    <small>按住Ctrl键可选择多个主机</small>
+                </div>
+                <div class="form-group">
+                    <label for="shutdownDelay">延迟时间(分钟):</label>
+                    <input type="number" id="shutdownDelay" name="delay" value="1" min="0" max="60">
+                    <small>0表示立即关机，最大60分钟</small>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="shutdownForce" name="force">
+                        <span class="checkmark"></span>
+                        强制关机（跳过确认）
+                    </label>
+                </div>
+                <div class="shutdown-actions">
+                    <button type="submit" class="shutdown-submit-btn">
+                        <i class="fas fa-power-off"></i> 执行关机
+                    </button>
+                    <button type="button" id="cancelShutdownBtn" class="cancel-shutdown-btn">
+                        <i class="fas fa-times"></i> 取消关机
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 通知消息 -->
+    <div id="notification" class="notification"></div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=4.0"></script>
+</body>
+</html>

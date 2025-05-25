@@ -1,0 +1,60 @@
+version: '3.3'
+
+services:
+  ansible-dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: ansible-dashboard
+    hostname: ansible-dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./ansible/hosts:/app/ansible/hosts
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - RUN_NETWORK_SCAN=true
+      - TZ=Asia/Shanghai
+    networks:
+      - ansible-net
+    restart: unless-stopped
+
+    command: python3 /app/backend/app.py
+
+  # 测试目标容器
+  test-target:
+    image: ubuntu:20.04
+    container_name: test-target
+    hostname: test-target
+    networks:
+      - ansible-net
+    environment:
+      - TZ=Asia/Shanghai
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y openssh-server python3 &&
+        mkdir -p /var/run/sshd &&
+        echo 'root:password' | chpasswd &&
+        sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config &&
+        sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config &&
+        /usr/sbin/sshd -D
+      "
+    restart: unless-stopped
+
+networks:
+  ansible-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  logs:
+    driver: local
+  data:
+    driver: local 

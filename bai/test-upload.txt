@@ -1,0 +1,4 @@
+这是一个Ansible Dashboard的测试文件
+用于测试文件上传功能
+创建时间: 5/24
+测试内容: Hello Ansible Dashboard! 

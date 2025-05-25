@@ -1,0 +1,29 @@
+---
+- name: 收集主机资源信息
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: 获取CPU使用率
+      shell: top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}'
+      register: cpu_usage
+
+    - name: 获取内存使用情况
+      shell: free -m | awk 'NR==2{printf "%.2f", $3*100/$2 }'
+      register: memory_usage
+
+    - name: 获取磁盘使用情况
+      shell: df -h | awk '$NF=="/"{printf "%s", $5}' | sed 's/%//'
+      register: disk_usage
+
+    - name: 获取系统负载
+      shell: uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//'
+      register: load_average
+
+    - name: 显示收集的信息
+      debug:
+        msg: |
+          主机: {{ inventory_hostname }}
+          CPU使用率: {{ cpu_usage.stdout | default('N/A') }}%
+          内存使用率: {{ memory_usage.stdout | default('N/A') }}%
+          磁盘使用率: {{ disk_usage.stdout | default('N/A') }}%
+          系统负载: {{ load_average.stdout | default('N/A') }} 

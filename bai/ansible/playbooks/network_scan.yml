@@ -1,0 +1,32 @@
+---
+- name: 网络连通性检测
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: 检测网络连通性
+      ping:
+      register: ping_result
+
+    - name: 获取网络接口信息
+      shell: ip addr show | grep -E "inet.*scope global" | awk '{print $2}'
+      register: network_interfaces
+      ignore_errors: yes
+
+    - name: 获取网关信息
+      shell: ip route | grep default | awk '{print $3}'
+      register: gateway_info
+      ignore_errors: yes
+
+    - name: 获取DNS配置
+      shell: cat /etc/resolv.conf | grep nameserver | awk '{print $2}'
+      register: dns_servers
+      ignore_errors: yes
+
+    - name: 显示网络信息
+      debug:
+        msg: |
+          主机: {{ inventory_hostname }}
+          连通性: {{ 'OK' if ping_result is succeeded else 'FAILED' }}
+          IP地址: {{ network_interfaces.stdout_lines | default(['N/A']) | join(', ') }}
+          网关: {{ gateway_info.stdout | default('N/A') }}
+          DNS: {{ dns_servers.stdout_lines | default(['N/A']) | join(', ') }} 
